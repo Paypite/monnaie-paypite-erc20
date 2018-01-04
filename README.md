@@ -1,2 +1,2 @@
-# monnaie-paypite-erc20
-Code du Smart Contract créant la monnaie paypite
+# Monnaie Digitale Paypite
+Code du Smart Contract créant la monnaie digitale paypite sur la blockchain Ethereum
