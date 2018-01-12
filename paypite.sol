@@ -1,9 +1,6 @@
 pragma solidity ^0.4.18;
 
 library SafeMath {
-  uint256 constant public MAX_UINT256 =
-    0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
-
   function mul(uint256 a, uint256 b) internal pure returns (uint256) {
     uint256 c = a * b;
     assert(a == 0 || c / a == b);
@@ -64,47 +61,26 @@ contract Ownable {
   }
 }
 
-contract ERC223 {
-  function balanceOf(address who) constant public returns (uint);
-
-  function name() constant public returns (string _name);
-  function symbol() constant public returns (string _symbol);
-  function decimals() constant public returns (uint8 _decimals);
-  function totalSupply() constant public returns (uint256 _supply);
-
-  function transfer(address to, uint value) public returns (bool ok);
-  function transfer(address to, uint value, bytes data) public returns (bool ok);
-  function transfer(address to, uint value, bytes data, string customFallback) public returns (bool ok);
-  event Transfer(address indexed from, address indexed to, uint value, bytes indexed data);
+/*
+ * @title Migration Agent interface
+ */
+contract MigrationAgent {
+  function migrateFrom(address _from, uint256 _value);
 }
 
- contract ContractReceiver {
-    struct TKN {
-      address sender;
-      uint value;
-      bytes data;
-      bytes4 sig;
-    }
+contract ERC20 {
+    function totalSupply() constant returns (uint256);
+    function balanceOf(address who) constant returns (uint256);
+    function transfer(address to, uint256 value);
+    function transferFrom(address from, address to, uint256 value);
+    function approve(address spender, uint256 value);
+    function allowance(address owner, address spender) constant returns (uint256);
 
-    function tokenFallback(address _from, uint _value, bytes _data) {
-      TKN memory tkn;
-      tkn.sender = _from;
-      tkn.value = _value;
-      tkn.data = _data;
-      uint32 u = uint32(_data[3]) + (uint32(_data[2]) << 8) + (uint32(_data[1]) << 16) + (uint32(_data[0]) << 24);
-      tkn.sig = bytes4(u);
-
-     /* tkn variable is analogue of msg variable of Ether transaction
-      * tkn.sender is person who initiated this token transaction   (analogue of msg.sender)
-      * tkn.value the number of tokens that were sent   (analogue of msg.value)
-      * tkn.data is data of token transaction   (analogue of msg.data)
-      * tkn.sig is 4 bytes signature of function
-      * if data of token transaction is a function execution
-      */
-    }
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(address indexed owner, address indexed spender, uint256 value);
 }
 
-contract PaypiteToken is Ownable, ERC223 {
+contract Paypite is Ownable, ERC20 {
   using SafeMath for uint256;
 
   address public owner = msg.sender;
@@ -144,15 +120,15 @@ contract PaypiteToken is Ownable, ERC223 {
   mapping(address => uint256) balances;
   mapping(address => mapping (address => uint256)) allowed;
   mapping(address => uint256) releaseTimes;
+  address public migrationAgent;
+  uint256 public totalMigrated;
 
-  event Transfer(address indexed _from, address indexed _to, uint256 _value);
-  event Approval(address indexed _owner, address indexed _spender, uint256 _value);
-  event TokenPurchase(address indexed purchaser, address indexed beneficiary, uint256 value, uint256 amount);
+  event Migrate(address indexed _from, address indexed _to, uint256 _value);
 
   // Constructor
-  // @notice PaypiteToken Contract
+  // @notice Paypite Contract
   // @return the transaction address
-  function PaypiteToken(address _multisig) {
+  function Paypite(address _multisig) {
     require(_multisig != 0x0);
     multisig = _multisig;
     balances[multisig] = _totalSupply;
@@ -164,72 +140,15 @@ contract PaypiteToken is Ownable, ERC223 {
     _;
   }
 
-  // Function that is called when a user or another contract wants to transfer funds
-  function transfer(address _to, uint256 _value, bytes _data, string _customFallback) canTrade public returns (bool) {
-    if (isContract(_to)) {
-      require(balanceOf(msg.sender) > _value);
-      balances[msg.sender] = (balanceOf(msg.sender)).sub(_value);
-      balances[_to] = (balanceOf(_to)).add(_value);
-      assert(_to.call.value(0)(bytes4(sha3(_customFallback)), msg.sender, _value, _data));
-      Transfer(msg.sender, _to, _value, _data);
-      return true;
-    } else {
-      return transferToAddress(_to, _value, _data);
-    }
-  }
-
-  // Function that is called when a user or another contract wants to transfer funds
-  function transfer(address _to, uint _value, bytes _data) canTrade returns (bool success) {
-    if (isContract(_to)) {
-      return transferToContract(_to, _value, _data);
-    } else {
-      return transferToAddress(_to, _value, _data);
-    }
-  }
-
   // Standard function transfer similar to ERC20 transfer with no _data
   // Added due to backwards compatibility reasons
-  function transfer(address _to, uint _value) canTrade returns (bool success) {
+  function transfer(address _to, uint256 _value) canTrade {
     require(!timeLocked(msg.sender));
-
-    // standard function transfer similar to ERC20 transfer with no _data
-    // added due to backwards compatibility reasons
-    bytes memory empty;
-    if (isContract(_to)) {
-      return transferToContract(_to, _value, empty);
-    } else {
-      return transferToAddress(_to, _value, empty);
-    }
-  }
-
-  // assemble the given address bytecode. If bytecode exists then the _addr is a contract
-  function isContract(address _addr) private returns (bool) {
-    uint length;
-    assembly {
-      // retrieve the size of the code on target address, this needs assembly
-      length := extcodesize(_addr)
-    }
-    return (length > 0);
-  }
-
-  // function that is called when transaction target is an address
-  function transferToAddress(address _to, uint _value, bytes _data) private returns (bool success) {
-    assert(balanceOf(msg.sender) > _value);
-    balances[msg.sender] = (balanceOf(msg.sender)).sub(_value);
-    balances[_to] = (balanceOf(_to)).add(_value);
-    Transfer(msg.sender, _to, _value, _data);
-    return true;
-  }
-
-  // function that is called when transaction target is a contract
-  function transferToContract(address _to, uint _value, bytes _data) private returns (bool success) {
-    assert(balanceOf(msg.sender) > _value);
+    _value = _value * decimalMultiplier;
+    require (balances[msg.sender] >= _value && _value > 0);
     balances[msg.sender] = balances[msg.sender].sub(_value);
     balances[_to] = balances[_to].add(_value);
-    ContractReceiver receiver = ContractReceiver(_to);
-    receiver.tokenFallback(msg.sender, _value, _data);
-    Transfer(msg.sender, _to, _value, _data);
-    return true;
+    Transfer(msg.sender, _to, _value);
   }
 
   /**
@@ -247,16 +166,16 @@ contract PaypiteToken is Ownable, ERC223 {
   * @param _to address The address which you want to transfer to
   * @param _value uint256 the amount of tokens to be transfered
   */
-  function transferFrom(address _from, address _to, uint256 _value) canTrade public returns (bool) {
+  function transferFrom(address _from, address _to, uint256 _value) canTrade {
     require(_to != address(0));
     require(!timeLocked(_from));
     uint256 _allowance = allowed[_from][msg.sender];
-    require(_allowance >= _value);
+    _value = _value * decimalMultiplier;
+    require(_value > 0 && _allowance >= _value);
     balances[_from] = balances[_from].sub(_value);
     balances[_to] = balances[_to].add(_value);
     allowed[_from][msg.sender] = _allowance.sub(_value);
     Transfer(_from, _to, _value);
-    return true;
   }
 
   /**
@@ -264,11 +183,19 @@ contract PaypiteToken is Ownable, ERC223 {
    * @param _spender The address which will spend the funds
    * @param _value The amount of tokens to be spent
    */
-  function approve(address _spender, uint256 _value) canTrade public returns (bool) {
-    require((_value == 0) || (allowed[msg.sender][_spender] == 0));
+  function approve(address _spender, uint256 _value) canTrade {
+    _value = _value * decimalMultiplier;
+    require((_value >= 0) && (allowed[msg.sender][_spender] >= 0));
     allowed[msg.sender][_spender] = _value;
     Approval(msg.sender, _spender, _value);
-    return true;
+  }
+
+  // Check the allowed value for the spender to withdraw from owner
+  // @param owner The address of the owner
+  // @param spender The address of the spender
+  // @return the amount which spender is still allowed to withdraw from owner
+  function allowance(address _owner, address spender) constant returns (uint256) {
+    return allowed[_owner][spender];
   }
 
   /**
@@ -276,7 +203,7 @@ contract PaypiteToken is Ownable, ERC223 {
    * @param _newTradableState New tradable state
    * @return A boolean that indicates if the operation was successful
    */
-  function setTradable(bool _newTradableState) onlyOwner public returns (bool success) {
+  function setTradable(bool _newTradableState) onlyOwner public {
     tradable = _newTradableState;
   }
 
@@ -315,7 +242,7 @@ contract PaypiteToken is Ownable, ERC223 {
   }
 
   // Checks if funds of a given address are time-locked
-  function timeLocked(address _spender) public returns (bool) {
+  function timeLocked(address _spender) private returns (bool) {
     if (releaseTimes[_spender] == 0) {
       return false;
     }
@@ -328,5 +255,35 @@ contract PaypiteToken is Ownable, ERC223 {
     }
 
     return true;
+  }
+
+  /**
+   * @notice Set address of migration target contract and enable migration
+	 * process.
+   * @dev Required state: Operational Normal
+   * @dev State transition: -> Operational Migration
+   * @param _agent The address of the MigrationAgent contract
+   */
+  function setMigrationAgent(address _agent) external onlyOwner {
+    require(migrationAgent == 0x0);
+    migrationAgent = _agent;
+  }
+
+  /*
+   * @notice Migrate tokens to the new token contract.
+   * @dev Required state: Operational Migration
+   * @param _value The amount of token to be migrated
+   */
+  function migrate(uint256 _value) external {
+    uint256 value = _value * decimalMultiplier;
+    require(migrationAgent != 0x0);
+    require(value >= 0);
+    require(value <= balances[msg.sender]);
+
+    balances[msg.sender] -= value;
+    _totalSupply -= value;
+    totalMigrated += value;
+    MigrationAgent(migrationAgent).migrateFrom(msg.sender, value);
+    Migrate(msg.sender, migrationAgent, value);
   }
 }
