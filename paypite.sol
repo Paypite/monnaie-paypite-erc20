@@ -83,8 +83,6 @@ contract ERC20 {
 contract Paypite is Ownable, ERC20 {
   using SafeMath for uint256;
 
-  address public owner = msg.sender;
-
   uint8 private _decimals = 18;
   uint256 public decimalMultiplier = 10**(uint256(_decimals));
 
@@ -132,7 +130,6 @@ contract Paypite is Ownable, ERC20 {
     require(_multisig != 0x0);
     multisig = _multisig;
     balances[multisig] = _totalSupply;
-    owner = msg.sender;
   }
 
   modifier canTrade() {
@@ -143,7 +140,7 @@ contract Paypite is Ownable, ERC20 {
   // Standard function transfer similar to ERC20 transfer with no _data
   // Added due to backwards compatibility reasons
   function transfer(address _to, uint256 _value) canTrade {
-    require(!timeLocked(msg.sender));
+    require(!isLocked(msg.sender));
     _value = _value * decimalMultiplier;
     require (balances[msg.sender] >= _value && _value > 0);
     balances[msg.sender] = balances[msg.sender].sub(_value);
@@ -167,8 +164,8 @@ contract Paypite is Ownable, ERC20 {
   * @param _value uint256 the amount of tokens to be transfered
   */
   function transferFrom(address _from, address _to, uint256 _value) canTrade {
-    require(_to != address(0));
-    require(!timeLocked(_from));
+    require(_to != 0x0);
+    require(!isLocked(_from));
     uint256 _allowance = allowed[_from][msg.sender];
     _value = _value * decimalMultiplier;
     require(_value > 0 && _allowance >= _value);
@@ -207,8 +204,10 @@ contract Paypite is Ownable, ERC20 {
     tradable = _newTradableState;
   }
 
-  function modifyCap(uint256 _cap) onlyOwner public {
-    _totalSupply = _cap;
+  function modifyCap(uint256 _newTotalSupply) onlyOwner public {
+    require(_newTotalSupply > 0);
+    _totalSupply = _newTotalSupply;
+    balances[multisig] = _totalSupply;
   }
 
   /**
@@ -228,32 +227,9 @@ contract Paypite is Ownable, ERC20 {
    * @return A boolean that indicates if the account is locked or not
    */
   function isLocked(address _spender) public view returns (bool) {
-    if (releaseTimes[_spender] == 0) {
+    if (releaseTimes[_spender] == 0 || releaseTimes[_spender] <= block.timestamp) {
       return false;
     }
-
-    // If time-lock is expired, delete it
-    // We consider timestamp dependency to be safe enough in this application
-    if (releaseTimes[_spender] <= block.timestamp) {
-      return false;
-    }
-
-    return true;
-  }
-
-  // Checks if funds of a given address are time-locked
-  function timeLocked(address _spender) private returns (bool) {
-    if (releaseTimes[_spender] == 0) {
-      return false;
-    }
-
-    // If time-lock is expired, delete it
-    // We consider timestamp dependency to be safe enough in this application
-    if (releaseTimes[_spender] <= block.timestamp) {
-      delete releaseTimes[_spender];
-      return false;
-    }
-
     return true;
   }
 
