@@ -139,60 +139,57 @@ contract Paypite is Ownable, ERC20 {
 
   // Standard function transfer similar to ERC20 transfer with no _data
   // Added due to backwards compatibility reasons
-  function transfer(address _to, uint256 _value) canTrade {
+  function transfer(address to, uint256 value) canTrade {
     require(!isLocked(msg.sender));
-    _value = _value * decimalMultiplier;
-    require (balances[msg.sender] >= _value && _value > 0);
-    balances[msg.sender] = balances[msg.sender].sub(_value);
-    balances[_to] = balances[_to].add(_value);
-    Transfer(msg.sender, _to, _value);
+    require (balances[msg.sender] >= value && value > 0);
+    balances[msg.sender] = balances[msg.sender].sub(value);
+    balances[to] = balances[to].add(value);
+    Transfer(msg.sender, to, value);
   }
 
   /**
    * @dev Gets the balance of the specified address
-   * @param _owner The address to query the the balance of
+   * @param who The address to query the the balance of
    * @return An uint256 representing the amount owned by the passed address
    */
-  function balanceOf(address _owner) view public returns (uint256 bal) {
-    return balances[_owner];
+  function balanceOf(address who) constant returns (uint256) {
+    return balances[who];
   }
 
  /**
   * @dev Transfer tokens from one address to another
-  * @param _from address The address which you want to send tokens from
-  * @param _to address The address which you want to transfer to
-  * @param _value uint256 the amount of tokens to be transfered
+  * @param from address The address which you want to send tokens from
+  * @param to address The address which you want to transfer to
+  * @param value uint256 the amount of tokens to be transfered
   */
-  function transferFrom(address _from, address _to, uint256 _value) canTrade {
-    require(_to != 0x0);
-    require(!isLocked(_from));
-    uint256 _allowance = allowed[_from][msg.sender];
-    _value = _value * decimalMultiplier;
-    require(_value > 0 && _allowance >= _value);
-    balances[_from] = balances[_from].sub(_value);
-    balances[_to] = balances[_to].add(_value);
-    allowed[_from][msg.sender] = _allowance.sub(_value);
-    Transfer(_from, _to, _value);
+  function transferFrom(address from, address to, uint256 value) canTrade {
+    require(to != 0x0);
+    require(!isLocked(from));
+    uint256 _allowance = allowed[from][msg.sender];
+    require(value > 0 && _allowance >= value);
+    balances[from] = balances[from].sub(value);
+    balances[to] = balances[to].add(value);
+    allowed[from][msg.sender] = _allowance.sub(value);
+    Transfer(from, to, value);
   }
 
   /**
    * @dev Approve the passed address to spend the specified amount of tokens on behalf of msg.sender
-   * @param _spender The address which will spend the funds
-   * @param _value The amount of tokens to be spent
+   * @param spender The address which will spend the funds
+   * @param value The amount of tokens to be spent
    */
-  function approve(address _spender, uint256 _value) canTrade {
-    _value = _value * decimalMultiplier;
-    require((_value >= 0) && (allowed[msg.sender][_spender] >= 0));
-    allowed[msg.sender][_spender] = _value;
-    Approval(msg.sender, _spender, _value);
+  function approve(address spender, uint256 value) canTrade {
+    require((value >= 0) && (allowed[msg.sender][spender] >= 0));
+    allowed[msg.sender][spender] = value;
+    Approval(msg.sender, spender, value);
   }
 
   // Check the allowed value for the spender to withdraw from owner
   // @param owner The address of the owner
   // @param spender The address of the spender
   // @return the amount which spender is still allowed to withdraw from owner
-  function allowance(address _owner, address spender) constant returns (uint256) {
-    return allowed[_owner][spender];
+  function allowance(address owner, address spender) constant returns (uint256) {
+    return allowed[owner][spender];
   }
 
   /**
@@ -206,7 +203,7 @@ contract Paypite is Ownable, ERC20 {
 
   function modifyCap(uint256 _newTotalSupply) onlyOwner public {
     require(_newTotalSupply > 0 && _newTotalSupply != _totalSupply);
-    balances[multisig] += _newTotalSupply - _totalSupply;
+    balances[multisig] = balances[multisig].add(_newTotalSupply.sub(_totalSupply));
     _totalSupply = _newTotalSupply;
   }
 
@@ -250,15 +247,14 @@ contract Paypite is Ownable, ERC20 {
    * @dev Required state: Operational Migration
    * @param _value The amount of token to be migrated
    */
-  function migrate(uint256 _value) external {
-    uint256 value = _value * decimalMultiplier;
+  function migrate(uint256 value) external {
     require(migrationAgent != 0x0);
     require(value >= 0);
     require(value <= balances[msg.sender]);
 
     balances[msg.sender] -= value;
-    _totalSupply -= value;
-    totalMigrated += value;
+    _totalSupply = _totalSupply.sub(value);
+    totalMigrated = totalMigrated.add(value);
     MigrationAgent(migrationAgent).migrateFrom(msg.sender, value);
     Migrate(msg.sender, migrationAgent, value);
   }
