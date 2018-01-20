@@ -84,7 +84,7 @@ contract Paypite is Ownable, ERC20 {
   using SafeMath for uint256;
 
   uint8 private _decimals = 18;
-  uint256 public decimalMultiplier = 10**(uint256(_decimals));
+  uint256 private decimalMultiplier = 10**(uint256(_decimals));
 
   string private _name = "Paypite";
   string private _symbol = "PIT";
