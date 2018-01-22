@@ -238,7 +238,7 @@ contract Paypite is Ownable, ERC20 {
    * @param _agent The address of the MigrationAgent contract
    */
   function setMigrationAgent(address _agent) external onlyOwner {
-    require(migrationAgent == 0x0);
+    require(migrationAgent == 0x0 && totalMigrated == 0);
     migrationAgent = _agent;
   }
 
