@@ -206,7 +206,8 @@ contract Paypite is Ownable, ERC20 {
     if (_newTotalSupply > _totalSupply) {
       balances[multisig] = balances[multisig].add(_newTotalSupply.sub(_totalSupply));
     } else {
-      balances[multisig] = balances[multisig].add(_totalSupply.sub(_newTotalSupply));
+      require(balances[multisig] > _totalSupply.sub(_newTotalSupply));
+      balances[multisig] = balances[multisig].sub(_totalSupply.sub(_newTotalSupply));
     }
     _totalSupply = _newTotalSupply;
   }
@@ -235,8 +236,7 @@ contract Paypite is Ownable, ERC20 {
   }
 
   /**
-   * @notice Set address of migration target contract and enable migration
-	 * process.
+   * @notice Set address of migration target contract and enable migration process
    * @dev Required state: Operational Normal
    * @dev State transition: -> Operational Migration
    * @param _agent The address of the MigrationAgent contract
