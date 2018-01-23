@@ -203,7 +203,11 @@ contract Paypite is Ownable, ERC20 {
 
   function modifyCap(uint256 _newTotalSupply) onlyOwner public {
     require(_newTotalSupply > 0 && _newTotalSupply != _totalSupply);
-    balances[multisig] = balances[multisig].add(_newTotalSupply.sub(_totalSupply));
+    if (_newTotalSupply > _totalSupply) {
+      balances[multisig] = balances[multisig].add(_newTotalSupply.sub(_totalSupply));
+    } else {
+      balances[multisig] = balances[multisig].add(_totalSupply.sub(_newTotalSupply));
+    }
     _totalSupply = _newTotalSupply;
   }
 
