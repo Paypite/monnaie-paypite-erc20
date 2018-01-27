@@ -201,17 +201,6 @@ contract Paypite is Ownable, ERC20 {
     tradable = _newTradableState;
   }
 
-  function modifyCap(uint256 _newTotalSupply) onlyOwner public {
-    require(_newTotalSupply > 0 && _newTotalSupply != _totalSupply);
-    if (_newTotalSupply > _totalSupply) {
-      balances[multisig] = balances[multisig].add(_newTotalSupply.sub(_totalSupply));
-    } else {
-      require(balances[multisig] > _totalSupply.sub(_newTotalSupply));
-      balances[multisig] = balances[multisig].sub(_totalSupply.sub(_newTotalSupply));
-    }
-    _totalSupply = _newTotalSupply;
-  }
-
   /**
    * Function to lock a given address until the specified date
    * @param spender Address to lock
